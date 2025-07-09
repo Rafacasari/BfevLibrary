@@ -23,7 +23,6 @@ public class ActionEvent : Event, IBfevDataBlock
     [JsonConstructor]
     public ActionEvent(string name) : base(name, EventType.Action)
     {
-        Parameters = new();
     }
 
     public ActionEvent(BfevReader reader) : base(reader)

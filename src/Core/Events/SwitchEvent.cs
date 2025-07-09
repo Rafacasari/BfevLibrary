@@ -32,8 +32,7 @@ public class SwitchEvent : Event, IBfevDataBlock
     [JsonConstructor]
     public SwitchEvent(string name) : base(name, EventType.Switch)
     {
-        Parameters = new();
-        SwitchCases = new();
+        SwitchCases = new List<SwitchCase>();
     }
 
     public SwitchEvent(BfevReader reader) : base(reader)

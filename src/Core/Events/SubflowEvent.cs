@@ -19,7 +19,6 @@ public class SubflowEvent : Event, IBfevDataBlock
     [JsonConstructor]
     public SubflowEvent(string name) : base(name, EventType.Subflow)
     {
-        Parameters = new();
     }
 
     public SubflowEvent(BfevReader reader) : base(reader)
