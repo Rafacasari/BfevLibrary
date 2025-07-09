@@ -1,4 +1,5 @@
-﻿using BfevLibrary.Common;
+﻿using System.Net.Http.Headers;
+using BfevLibrary.Common;
 using BfevLibrary.Parsers;
 
 namespace BfevLibrary.Core;
@@ -6,9 +7,15 @@ namespace BfevLibrary.Core;
 public class EntryPoint : IBfevDataBlock
 {
     public List<short> SubFlowEventIndices { get; set; }
+
+    public RadixTree<VariableDef>? Variables { get; set; }
+
     public short EventIndex { get; set; }
 
-    public EntryPoint() { }
+    public EntryPoint()
+    {
+    }
+
     public EntryPoint(BfevReader reader)
     {
         Read(reader);
@@ -17,36 +24,63 @@ public class EntryPoint : IBfevDataBlock
     public IBfevDataBlock Read(BfevReader reader)
     {
         long subFlowEventIndicesPtr = reader.ReadInt64();
-        reader.BaseStream.Position += 8 + 8; // unused (in botw) VariableDef pointers (ulong, ulong)
+        long variableDefNamesPtr = reader.ReadInt64();
+        long variableDefsPtr = reader.ReadInt64();
         ushort subFlowEventIndicesCount = reader.ReadUInt16();
-        reader.BaseStream.Position += 2; // unused (in botw) VariableDef count (ushort)
+        ushort variableDefCount = reader.ReadUInt16();
         EventIndex = reader.ReadInt16();
         reader.BaseStream.Position += 2; // padding
-        SubFlowEventIndices = reader.ReadObjectsPtr(new short[subFlowEventIndicesCount], reader.ReadInt16, subFlowEventIndicesPtr).ToList();
+
+        SubFlowEventIndices = reader.ReadObjectsPtr(
+            new short[subFlowEventIndicesCount], reader.ReadInt16, subFlowEventIndicesPtr).ToList();
+
+        Variables = reader.ReadObjectPtr(() => new RadixTree<VariableDef>(reader), variableDefNamesPtr);
+        Variables?.LinkToArray(
+            reader.ReadObjectsPtr(new VariableDef[variableDefCount], () => new VariableDef(reader), variableDefsPtr)
+        );
+
+        reader.Align(8);
         return this;
     }
 
     public void Write(BfevWriter writer)
     {
         Action insertSubFlowEventIndicesPtr = writer.ReservePtrIf(SubFlowEventIndices.Count > 0, register: true);
-        writer.Write(0L); // Unused (in botw) VariableDef pointer (ulong)
-        writer.WriteNullPtr(register: true); // Unused (in botw) VariableDef dict pointer (ulong)
+        Action insertVariableDefDictPtr = writer.ReservePtrIf(Variables is { Count: > 0 }, register: true);
+        Action insertVariableDefsPtr = writer.ReservePtrIf(Variables is { Count: > 0 }, register: true);
         writer.Write((ushort)SubFlowEventIndices.Count);
-        writer.Write((ushort)0); // Unused (in botw) VariableDefs count
+        writer.Write((ushort)(Variables?.Count ?? 0));
         writer.Write(EventIndex);
-        writer.Write((ushort)0); // Padding
-        writer.ReserveBlockWriter("EntryPointArrayDataBlock", () => {
+        writer.Align(8);
+        
+        writer.ReserveBlockWriter("EntryPointExtraDataBlock", () => {
             if (SubFlowEventIndices.Count > 0) {
                 insertSubFlowEventIndicesPtr();
-                for (int i = 0; i < SubFlowEventIndices.Count; i++) {
-                    writer.Write(SubFlowEventIndices[i]);
+                foreach (short s16 in SubFlowEventIndices) {
+                    writer.Write(s16);
                 }
+
                 writer.Align(8);
             }
 
-            // Not really sure what this is for, based
-            // off evfl by leoetlino (evfl/entry_point.py)
-            writer.Seek(24, SeekOrigin.Current);
+            if (Variables is not { Count: > 0 }) {
+                return;
+            }
+
+            insertVariableDefDictPtr();
+            writer.WriteRadixTree(Variables.Keys.ToArray());
+            writer.Align(8);
+            
+            insertVariableDefsPtr();
+            foreach (VariableDef variableDef in Variables.Values) {
+                variableDef.Write(writer);
+            }
+            
+            writer.WriteReserved("VariableDefData", alignment: 8);
+            
+            // The size for each entry point is sizeof(event_idx_array)
+            // rounded up to the nearest multiple of 8 + 0x18 bytes.
+            writer.Seek(0x18, SeekOrigin.Current);
         });
     }
 }

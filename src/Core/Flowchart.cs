@@ -103,7 +103,7 @@ public class Flowchart : IBfevDataBlock
 
         writer.WriteReserved("EventArrayDataBlock", alignment: 8);
         writer.WriteReserved("ActorArrayDataBlock", alignment: 8);
-        writer.WriteReserved("EntryPointArrayDataBlock", alignment: 8);
+        writer.WriteReserved("EntryPointExtraDataBlock", alignment: 8);
         writer.Align(8);
     }
 
